@@ -1,0 +1,84 @@
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
+import structlog
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.ext.asyncio import AsyncEngine
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+
+from app import __version__
+from app.api.errors import install_exception_handlers
+from app.api.health import router as health_router
+from app.api.router import create_api_router
+from app.container import Container
+from app.core.config import Settings, get_settings
+from app.core.logging import configure_logging
+from app.core.observability import RequestContextMiddleware, metrics_response
+
+
+def create_app(
+        settings: Settings | None = None, 
+        engine: AsyncEngine | None = None
+    ) -> FastAPI:
+    app_settings = settings or get_settings()
+    configure_logging(app_settings)
+    
+    container = Container.build(app_settings, engine)
+    logger = structlog.get_logger("application")
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
+        
+        try:
+            await container.start()
+
+            logger.info(
+                "application_started",
+                service=app_settings.service_name,
+                environment=app_settings.environment,
+            )
+
+            yield
+        finally:
+            await container.close()
+
+            logger.info(
+                "application_stopped",
+                service=app_settings.service_name,
+            )
+
+    docs_url = "/docs" if app_settings.docs_enabled else None
+    
+    application = FastAPI(
+        title=app_settings.service_name,
+        version=__version__,
+        docs_url=docs_url,
+        redoc_url="/redoc",
+        openapi_url=f"{app_settings.api_prefix}/openapi.json" if docs_url else None,
+        lifespan=lifespan,
+    )
+    application.state.container = container
+
+    application.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=app_settings.trusted_hosts,
+    )
+    if app_settings.cors_origins:
+        application.add_middleware(
+            CORSMiddleware,
+            allow_origins=app_settings.cors_origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+    application.add_middleware(RequestContextMiddleware)
+
+    install_exception_handlers(application)
+    application.include_router(health_router)
+    application.add_api_route("/metrics", metrics_response, include_in_schema=False)
+    application.include_router(create_api_router(), prefix=app_settings.api_prefix)
+    return application
+
+
+app = create_app()

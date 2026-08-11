@@ -1,0 +1,14 @@
+{
+    "python.analysis.typeCheckingMode": "strict",
+    "editor.codeActionsOnSave": {
+        "source.fixAll.ruff": "explicit"
+    },
+    "editor.formatOnSave": true,
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportUnknownVariableType": "none",
+        "reportUnknownMemberType": "none",
+        "reportUnknownArgumentType": "none",
+        "reportUnknownParameterType": "none",
+        "reportUnknownCallResult": "none"
+    }
+}
