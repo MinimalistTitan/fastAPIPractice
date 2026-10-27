@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 FROM ghcr.io/astral-sh/uv:0.12.1 AS uv
-FROM python:3.14.6-slim AS runtime
+FROM python:3.15.0-slim AS runtime
 
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
